@@ -1,0 +1,19 @@
+....................................................F
+================================== FAILURES ===================================
+________________________________ test_str_repr ________________________________
+
+    def test_str_repr():
+        """Testea las representaciones __str__ y __repr__ de Checker."""
+        checker = Checker(color="negras", posicion=3, identificador="A1")
+        s = str(checker)
+        r = repr(checker)
+        assert "Checker(" in s
+        assert "negras" in s
+>       assert "pos 3" in s
+E       AssertionError: assert 'pos 3' in 'Checker(negras, pos 4)'
+
+..\computacion-2025-backgammon-BarbozaFederico\tests\test_checker.py:77: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_checker.py::test_str_repr - AssertionError: assert 'pos 3' ...
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 52 passed in 0.14s

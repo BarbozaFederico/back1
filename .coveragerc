@@ -1,0 +1,11 @@
+[run]
+branch = True
+omit =
+    backgammon/cli/*
+    backgammon/pygame_ui/*
+    backgammon/__init__.py
+    backgammon/core/__init__.py
+
+[report]
+# Esto hace que coverage muestre también líneas no cubiertas en el reporte de terminal
+show_missing = True
