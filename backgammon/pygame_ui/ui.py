@@ -256,8 +256,11 @@ class PygameUI:
             self.possible_dests = []
             return
 
-        # Apply the move
-        secuencia = SecuenciaMovimiento([move_to_apply])
+        # Create and apply the move
+        is_capture = len(self.game.board.points[end_idx]) == 1 and self.game.board.points[end_idx][0].get_color() != player.get_color()
+        paso = PasoMovimiento(desde=start_idx, hasta=end_idx, dado=move_dist, captura=is_capture)
+        secuencia = [paso]
+        main
         self.game.board.aplicar_movimiento(player, secuencia)
         self.used_dice.append(move_to_apply.dado)
 
