@@ -25,20 +25,37 @@ class PygameUI:
         self.font = pygame.font.Font(None, 24)
         self.clock = pygame.time.Clock()
 
-        # Board layout constants
-        self.point_width = 50
-        self.point_height = 200
-        self.bar_width = 100
-        self.board_edge = 20
-        self.checker_radius = 20
+        # Dynamic board layout constants
+        self.board_edge = int(WIDTH * 0.02)
+        self.point_height = int(HEIGHT * 0.4)
+
+        playing_width = WIDTH - (2 * self.board_edge)
+        # Total horizontal space is divided into 12 points and 1 bar.
+        # Let's consider the bar to be twice as wide as a point.
+        # So, we have 12 + 2 = 14 "units" of width.
+        unit_width = playing_width / 14
+        self.point_width = int(unit_width)
+        self.bar_width = int(unit_width * 2)
+
+        self.checker_radius = int(self.point_width * 0.45)
         self.selected_point = None
         self.point_rects = [None] * 24
+        self.bar_rects = {}
         self._calculate_point_rects()
+        self._calculate_bar_rects()
         self.used_dice = []
         self.possible_moves = []
+        self.possible_dests = []
+        self.selected_source = None # Can be point index or 'bar'
 
         self.game = BackgammonGame()
         self._setup_game()
+
+    def _calculate_bar_rects(self):
+        """Calculates the clickable rects for each player's bar."""
+        bar_x = self.board_edge + 6 * self.point_width
+        self.bar_rects['blancas'] = pygame.Rect(bar_x, 0, self.bar_width, HEIGHT / 2)
+        self.bar_rects['negras'] = pygame.Rect(bar_x, HEIGHT / 2, self.bar_width, HEIGHT / 2)
 
     def _setup_game(self):
         """Sets up the players and starts the game."""
@@ -80,10 +97,19 @@ class PygameUI:
         """Draws the checkers on the board based on the game state."""
         checker_colors = {"blancas": WHITE, "negras": BLACK}
 
-        # Highlight selected point
-        if self.selected_point is not None:
-            rect = self.point_rects[self.selected_point]
-            pygame.draw.rect(self.screen, GREEN, rect, 4) # 4 is the width of the border
+        # Highlight selected source
+        if self.selected_source is not None:
+            if self.selected_source == 'bar':
+                player_color = self.game.get_current_player().get_color()
+                rect = self.bar_rects[player_color]
+            else:
+                rect = self.point_rects[self.selected_source]
+            pygame.draw.rect(self.screen, GREEN, rect, 4)
+
+        # Highlight possible destinations
+        for dest_idx in self.possible_dests:
+            rect = self.point_rects[dest_idx]
+            pygame.draw.circle(self.screen, GREEN, rect.center, self.checker_radius * 0.3)
 
         # Draw checkers on points
         for point_idx, checkers in enumerate(self.game.board.points):
@@ -197,91 +223,131 @@ class PygameUI:
                 return i
         return None
 
-    def _attempt_move(self, start_idx, end_idx):
-        """
-        Attempts to make a move, interfacing with the core logic.
+    def _get_possible_dests(self, source):
+        """Get all possible destination points for a selected source."""
+        dests = []
+        start_point = None if source == 'bar' else source
 
-        NOTE: This is a simplified implementation to provide basic interactivity.
-        The core game logic is designed around evaluating and applying full turns
-        (sequences of moves), which is ideal for an AI but not for a direct
-        human-in-the-loop UI. A more robust implementation would require either
-        refactoring the core logic to be more UI-friendly or building a much
-        more complex state machine in the UI to manage the turn.
-        """
-        player = self.game.get_current_player()
-
-        move_dist = abs(start_idx - end_idx)
-
-        available_dice = list(self.game.dice.get_values())
-        for die in self.used_dice:
-            if die in available_dice:
-                available_dice.remove(die)
-
-        if move_dist not in available_dice:
-            print(f"Invalid move: No available die for distance {move_dist}")
-            return
-
-        # Check if this move is legal according to the core logic
-        is_legal = False
         for option in self.possible_moves:
             for paso in option.secuencia:
-                if paso.desde == start_idx and paso.hasta == end_idx:
-                    is_legal = True
+                if paso.desde == start_point:
+                    if paso.hasta is not None:
+                        dests.append(paso.hasta)
+        return list(set(dests))
+
+    def _attempt_move(self, source, dest_idx):
+        """Finds the correct PasoMovimiento, applies it, and updates the turn state."""
+        player = self.game.get_current_player()
+        start_idx = None if source == 'bar' else source
+
+        # Find a legal move that matches the selected start/end and an available die
+        move_to_apply = None
+        for option in self.possible_moves:
+            for paso in option.secuencia:
+                if paso.desde == start_idx and paso.hasta == dest_idx and paso.dado in self._get_available_dice():
+                    move_to_apply = paso
                     break
-            if is_legal:
+            if move_to_apply:
                 break
 
-        if not is_legal:
-            print("Move not found in legal options.")
+        if not move_to_apply:
+            print(f"Invalid move from {source} to {dest_idx}.")
+            self.selected_source = None
+            self.possible_dests = []
             return
 
-        # Create and apply the move
-        is_capture = len(self.game.board.points[end_idx]) == 1 and self.game.board.points[end_idx][0].get_color() != player.get_color()
-        paso = PasoMovimiento(desde=start_idx, hasta=end_idx, dado=move_dist, captura=is_capture)
-        secuencia = SecuenciaMovimiento([paso])
+        # Apply the move
+        secuencia = SecuenciaMovimiento([move_to_apply])
         self.game.board.aplicar_movimiento(player, secuencia)
-        self.used_dice.append(move_dist)
+        self.used_dice.append(move_to_apply.dado)
+
+        # Reset selection and recalculate moves for the rest of the turn
+        self.selected_source = None
+        self.possible_dests = []
+        available_dice = self._get_available_dice()
+        self.possible_moves = self.game.board.enumerar_opciones_legales(player, available_dice)
 
         # Check if turn is over
-        if len(self.used_dice) >= len(self.game.dice.get_values()):
-            self.game.next_turn()
-            self.game.roll_dice()
-            self.used_dice = []
-            self.possible_moves = self.game.board.enumerar_opciones_legales(self.game.get_current_player(), self.game.dice)
+        if not available_dice or not self.possible_moves:
+            self._end_turn()
 
+    def _get_current_dice(self):
+        """Returns the full list of dice for the current turn, handling doubles."""
+        dice = list(self.game.dice.get_values())
+        if len(dice) == 2 and dice[0] == dice[1]:
+            return [dice[0]] * 4
+        return dice
+
+    def _get_available_dice(self):
+        """Returns the dice that have not yet been used this turn."""
+        available = self._get_current_dice()
+        for die in self.used_dice:
+            if die in available:
+                available.remove(die)
+        return available
+
+    def _end_turn(self):
+        """Finalizes the current turn and sets up the next one."""
+        print("Turn over.")
+        self.game.next_turn()
+        self.game.roll_dice()
+        self.used_dice = []
+        self.possible_moves = self.game.board.enumerar_opciones_legales(self.game.get_current_player(), self._get_current_dice())
+
+    def _handle_click(self, pos):
+        """Handles a mouse click on the board."""
+        player = self.game.get_current_player()
+
+        # Player must move from the bar if they have checkers there
+        if self.game.board.jugador_tiene_en_barra(player):
+            if self.bar_rects[player.get_color()].collidepoint(pos):
+                self.selected_source = 'bar'
+                self.possible_dests = self._get_possible_dests(self.selected_source)
+            else:
+                self.selected_source = None
+                self.possible_dests = []
+            return
+
+        clicked_point = self._get_point_from_pos(pos)
+        if clicked_point is None:
+            self.selected_source = None
+            self.possible_dests = []
+            return
+
+        if self.selected_source is not None:
+            if clicked_point in self.possible_dests:
+                self._attempt_move(self.selected_source, clicked_point)
+            else:
+                if self.game.board.points[clicked_point] and self.game.board.points[clicked_point][0].get_color() == player.get_color():
+                    self.selected_source = clicked_point
+                    self.possible_dests = self._get_possible_dests(self.selected_source)
+                else:
+                    self.selected_source = None
+                    self.possible_dests = []
+        else:
+            if self.game.board.points[clicked_point] and self.game.board.points[clicked_point][0].get_color() == player.get_color():
+                self.selected_source = clicked_point
+                self.possible_dests = self._get_possible_dests(self.selected_source)
 
     def run(self):
-        """
-        The main loop of the game.
-        """
-        self.possible_moves = self.game.board.enumerar_opciones_legales(self.game.get_current_player(), self.game.dice)
+        """The main loop of the game."""
+        self._end_turn()
+
         running = True
         while running:
+            if not self.used_dice and not self.possible_moves:
+                self._end_turn()
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    clicked_point = self._get_point_from_pos(event.pos)
-
-                    if self.selected_point is None:
-                        # Nothing selected, try to select a point
-                        if clicked_point is not None and self.game.board.points[clicked_point]:
-                            checker_color = self.game.board.points[clicked_point][0].get_color()
-                            if checker_color == self.game.get_current_player().get_color():
-                                self.selected_point = clicked_point
-                    else:
-                        # A point is already selected, try to move
-                        if clicked_point is not None and clicked_point != self.selected_point:
-                            self._attempt_move(self.selected_point, clicked_point)
-                        self.selected_point = None # Deselect after move attempt
-
+                    self._handle_click(event.pos)
 
             self.screen.fill(BOARD_COLOR)
-
             self._draw_board()
             self._draw_checkers()
             self._draw_game_info()
-
             pygame.display.flip()
             self.clock.tick(60)
 
