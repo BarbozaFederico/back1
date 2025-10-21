@@ -96,8 +96,13 @@ def test_bear_off_move(monkeypatch, mock_pygame):
 
     # - Second click: click on the bear-off area.
     monkeypatch.setattr(ui, '_get_point_from_pos', lambda pos: None) # Click is not on a point
-    ui.bear_off_rects[player.get_color()] = Mock(collidepoint=lambda pos: True)
-    ui._handle_click((300, 300)) # Position doesn't matter
+    # Mock the bear_off_rects to return a mock rect that will register the click
+    mock_bear_off_rect = Mock()
+    mock_bear_off_rect.collidepoint.return_value = True
+    ui.bear_off_rects[player.get_color()] = mock_bear_off_rect
+    # We also need to mock _get_bear_off_from_pos to return 'bear_off'
+    monkeypatch.setattr(ui, '_get_bear_off_from_pos', lambda pos: 'bear_off')
+    ui._handle_click((1300, 100)) # A position in the new bear-off area
 
     # 4. Assert the game state has changed as expected:
     # - The checker is no longer on the board.
