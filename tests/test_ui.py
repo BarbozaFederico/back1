@@ -63,3 +63,48 @@ def test_move_from_bar(monkeypatch, mock_pygame):
     # - The selection state is reset.
     assert ui.selected_source is None
     assert not ui.possible_dests
+
+def test_bear_off_move(monkeypatch, mock_pygame):
+    """Test bearing off a checker."""
+    monkeypatch.setattr('backgammon.pygame_ui.ui.pygame', mock_pygame)
+    ui = PygameUI()
+    game = ui.game
+    player = game.get_current_player() # Assume it's White
+
+    # 1. Setup the board for bear-off: all checkers in the home board.
+    # We'll place one checker on point 23 (index 22) and the rest elsewhere in home.
+    game.board.points = [[] for _ in range(24)] # Clear the board
+    player_checkers = player.get_checkers()
+    game.board.place_checker(player_checkers[0], 22) # Point 23
+    for i in range(1, 15):
+        game.board.place_checker(player_checkers[i], 18 + (i % 5)) # Other home points
+
+    # 2. Set dice to a roll that allows bearing off from point 23 (e.g., a 2 or more).
+    # White moves from high to low, but direction is positive. home_points: 18-23. Entry -1.
+    # A roll of 2 from point 23 (index 22) means 22 + 2 = 24, which is off.
+    game.dice.set_values((2, 1))
+    ui.possible_moves = game.board.enumerar_opciones_legales(player, ui._get_current_dice())
+
+    # 3. Simulate the player's actions:
+    # - First click: select the checker on point 23.
+    monkeypatch.setattr(ui, '_get_point_from_pos', lambda pos: 22)
+    ui._handle_click((200, 200)) # Position doesn't matter
+
+    # Check that the source is selected and 'bear_off' is a possible destination
+    assert ui.selected_source == 22
+    assert 'bear_off' in ui.possible_dests
+
+    # - Second click: click on the bear-off area.
+    monkeypatch.setattr(ui, '_get_point_from_pos', lambda pos: None) # Click is not on a point
+    ui.bear_off_rects[player.get_color()] = Mock(collidepoint=lambda pos: True)
+    ui._handle_click((300, 300)) # Position doesn't matter
+
+    # 4. Assert the game state has changed as expected:
+    # - The checker is no longer on the board.
+    assert player_checkers[0] not in game.board.points[22]
+    # - The checker is in the borne_off list.
+    assert player_checkers[0] in game.board.get_borne_off(player.get_color())
+    # - The used dice includes 2.
+    assert 2 in ui.used_dice
+    # - The selection state is reset.
+    assert ui.selected_source is None
