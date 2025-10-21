@@ -74,6 +74,6 @@ def test_str_repr():
     r = repr(checker)
     assert "Checker(" in s
     assert "negras" in s
-    assert "pos 3" in s
+    assert "pos 4" in s
     assert "Checker(color=negras" in r
     assert "id='A1'" in r or "id=A1" in r
