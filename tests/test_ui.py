@@ -113,3 +113,28 @@ def test_bear_off_move(monkeypatch, mock_pygame):
     assert 2 in ui.used_dice
     # - The selection state is reset.
     assert ui.selected_source is None
+
+def test_game_over_detection(monkeypatch, mock_pygame):
+    """Test that the UI detects the game over state correctly."""
+    monkeypatch.setattr('backgammon.pygame_ui.ui.pygame', mock_pygame)
+    ui = PygameUI()
+    game = ui.game
+    player = game.get_current_player()
+
+    # 1. Setup a game state where the current player has won
+    # (all their checkers are in borne_off).
+    for checker in player.get_checkers():
+        game.board.bear_off_checker(checker)
+
+    # 2. Mock the is_game_over method to return True
+    # In a real scenario, this would be based on the board state.
+    # The game logic is tested elsewhere, here we ensure the UI reacts to it.
+    monkeypatch.setattr(game, 'is_game_over', lambda: True)
+
+    # 3. Call _end_turn(), which should trigger the game over logic.
+    ui._end_turn()
+
+    # 4. Assert that the UI has entered the game over state.
+    assert ui.game_over is True
+    assert ui.winner == player
+    assert ui.game_over_time is not None
