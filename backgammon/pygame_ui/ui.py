@@ -1,5 +1,6 @@
 import pygame
 import sys
+import time
 from backgammon.core.backgammon import BackgammonGame
 from backgammon.core.player import PasoMovimiento, SecuenciaMovimiento
 
@@ -23,7 +24,11 @@ class PygameUI:
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption("Backgammon")
         self.font = pygame.font.Font(None, 24)
+        self.large_font = pygame.font.Font(None, 74)
         self.clock = pygame.time.Clock()
+        self.game_over = False
+        self.winner = None
+        self.game_over_time = None
 
         # Dynamic board layout constants
         self.board_edge = int(WIDTH * 0.02)
@@ -178,6 +183,19 @@ class PygameUI:
                 rect = self.point_rects[dest]
                 pygame.draw.circle(self.screen, GREEN, rect.center, self.checker_radius * 0.3)
 
+    def _draw_game_over_screen(self):
+        """Draws the game over screen."""
+        # Create a semi-transparent overlay
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180)) # Black with alpha
+        self.screen.blit(overlay, (0, 0))
+
+        # Display winner message
+        winner_text = f"¡Gana el jugador {self.winner.get_nombre()}!"
+        text_surface = self.large_font.render(winner_text, True, WHITE)
+        text_rect = text_surface.get_rect(center=(WIDTH / 2, HEIGHT / 2))
+        self.screen.blit(text_surface, text_rect)
+
     def _draw_game_info(self):
         """Displays the current player and dice roll."""
         player = self.game.get_current_player()
@@ -325,6 +343,14 @@ class PygameUI:
     def _end_turn(self):
         """Finalizes the current turn and sets up the next one."""
         print("Turn over.")
+
+        # Check for a winner before advancing the turn
+        if self.game.is_game_over():
+            self.game_over = True
+            self.winner = self.game.get_current_player()
+            self.game_over_time = time.time()
+            return
+
         self.game.next_turn()
         self.game.roll_dice()
         self.used_dice = []
@@ -398,13 +424,21 @@ class PygameUI:
 
         running = True
         while running:
+            if self.game_over:
+                self._draw_game_over_screen()
+                pygame.display.flip()
+                if time.time() - self.game_over_time > 5: # 5-second delay
+                    running = False
+                self.clock.tick(10) # Tick at a lower rate
+                continue
+
             if not self.used_dice and not self.possible_moves:
                 self._end_turn()
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-                if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.type == pygame.MOUSEBUTTONDOWN and not self.game_over:
                     self._handle_click(event.pos)
 
             self.screen.fill(BOARD_COLOR)
