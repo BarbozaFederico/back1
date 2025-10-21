@@ -256,11 +256,9 @@ class PygameUI:
             self.possible_dests = []
             return
 
-        # Create and apply the move
-        is_capture = len(self.game.board.points[end_idx]) == 1 and self.game.board.points[end_idx][0].get_color() != player.get_color()
-        paso = PasoMovimiento(desde=start_idx, hasta=end_idx, dado=move_dist, captura=is_capture)
-        secuencia = [paso]
-        main
+        # The move is valid, so we can apply it.
+        # The 'move_to_apply' object is a PasoMovimiento which contains all necessary info.
+        secuencia = [move_to_apply]  # aplicar_movimiento expects a list of steps
         self.game.board.aplicar_movimiento(player, secuencia)
         self.used_dice.append(move_to_apply.dado)
 
@@ -300,34 +298,53 @@ class PygameUI:
     def _handle_click(self, pos):
         """Handles a mouse click on the board."""
         player = self.game.get_current_player()
+        clicked_point = self._get_point_from_pos(pos)
 
-        # Player must move from the bar if they have checkers there
+        # Priority 1: Handle moves from the bar
         if self.game.board.jugador_tiene_en_barra(player):
-            if self.bar_rects[player.get_color()].collidepoint(pos):
+            # If the bar is already selected, check for a valid destination click
+            if self.selected_source == 'bar':
+                if clicked_point in self.possible_dests:
+                    self._attempt_move('bar', clicked_point)
+                else: # Click was not on a valid destination, so deselect
+                    self.selected_source = None
+                    self.possible_dests = []
+                return # Action handled for this click
+
+            # If the bar is NOT selected, check if the click is on the bar to select it
+            elif self.bar_rects[player.get_color()].collidepoint(pos):
                 self.selected_source = 'bar'
                 self.possible_dests = self._get_possible_dests(self.selected_source)
+                return # Action handled for this click
+
+            # If click is elsewhere, do nothing (or reset) since player must play from bar
             else:
                 self.selected_source = None
                 self.possible_dests = []
-            return
+            return # IMPORTANT: prevent any other move logic from running
 
-        clicked_point = self._get_point_from_pos(pos)
+        # Priority 2: Handle regular moves if the bar is empty
         if clicked_point is None:
             self.selected_source = None
             self.possible_dests = []
             return
 
+        # If a checker is already selected
         if self.selected_source is not None:
+            # If a valid destination is clicked, attempt the move
             if clicked_point in self.possible_dests:
                 self._attempt_move(self.selected_source, clicked_point)
+            # If another of the player's checkers is clicked, switch selection
+            elif self.game.board.points[clicked_point] and self.game.board.points[clicked_point][0].get_color() == player.get_color():
+                self.selected_source = clicked_point
+                self.possible_dests = self._get_possible_dests(self.selected_source)
+            # Otherwise, deselect
             else:
-                if self.game.board.points[clicked_point] and self.game.board.points[clicked_point][0].get_color() == player.get_color():
-                    self.selected_source = clicked_point
-                    self.possible_dests = self._get_possible_dests(self.selected_source)
-                else:
-                    self.selected_source = None
-                    self.possible_dests = []
+                self.selected_source = None
+                self.possible_dests = []
+        # If no checker is selected
         else:
+            # If one of the player's checkers is clicked, select it
             if self.game.board.points[clicked_point] and self.game.board.points[clicked_point][0].get_color() == player.get_color():
                 self.selected_source = clicked_point
                 self.possible_dests = self._get_possible_dests(self.selected_source)

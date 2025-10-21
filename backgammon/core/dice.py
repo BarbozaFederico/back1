@@ -46,3 +46,14 @@ class Dice:
             Una tupla con los valores actuales de ambos dados.
         """
         return (self.dice1, self.dice2)
+
+    def set_values(self, values: tuple[int, int]) -> None:
+        """
+        Sets the values of the dice for testing purposes.
+
+        Parameters
+        ----------
+        values : tuple[int, int]
+            The values to set for the dice.
+        """
+        self.dice1, self.dice2 = values
