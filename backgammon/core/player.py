@@ -55,6 +55,7 @@ class TableroFachada(Protocol):
 
     def jugador_tiene_en_barra(self, jugador: "Player") -> bool: ...
     def jugador_todo_en_home(self, jugador: "Player") -> bool: ...
+    def oponente_en_cuadrante(self, jugador: "Player") -> bool: ...
     def jugador_pip_count(self, jugador: "Player") -> int: ...
     def enumerar_opciones_legales(
         self, jugador: "Player", dados: Sequence[ValorDado]
@@ -395,7 +396,11 @@ class Player:
         -------
         bool
         """
-        return self.todas_en_home(tablero) and not self.tiene_en_barra(tablero)
+        return (
+            self.todas_en_home(tablero)
+            and not self.tiene_en_barra(tablero)
+            and not tablero.oponente_en_cuadrante(self)
+        )
 
     def colocar_checker_en_posicion(self, checker: "Checker", posicion: int) -> None:
         """

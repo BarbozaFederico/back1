@@ -24,6 +24,9 @@ class DummyTablero:
     def jugador_todo_en_home(self, jugador):
         return self.home
 
+    def oponente_en_cuadrante(self, jugador):
+        return False
+
     def jugador_pip_count(self, jugador):
         return self.pip
 
@@ -136,6 +139,30 @@ def test_player_puede_bear_off():
     assert p.puede_bear_off(dummy) is True
     dummy.bar = True
     assert p.puede_bear_off(dummy) is False
+
+def test_puede_bear_off_con_oponente_en_cuadrante():
+    """Testea que no se pueda hacer bear off con oponente en el cuadrante."""
+    p = make_player()
+
+    class DummyTableroConOponente(DummyTablero):
+        def __init__(self):
+            super().__init__()
+            self.oponente_presente = False
+
+        def oponente_en_cuadrante(self, jugador):
+            return self.oponente_presente
+
+    dummy = DummyTableroConOponente()
+    dummy.home = True
+    dummy.bar = False
+
+    # Escenario 1: Oponente presente, no se puede hacer bear off
+    dummy.oponente_presente = True
+    assert p.puede_bear_off(dummy) is False
+
+    # Escenario 2: Oponente no presente, se puede hacer bear off
+    dummy.oponente_presente = False
+    assert p.puede_bear_off(dummy) is True
 
 
 def test_player_getters_setters():
