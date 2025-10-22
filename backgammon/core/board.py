@@ -749,3 +749,16 @@ class Board:
 
         player_color = "None" if player is None else player.get_color()
         return f"{player_color}:{'|'.join(steps)}"
+
+    def oponente_en_cuadrante(self, player: "Player") -> bool:
+        """
+        Checks if there is any opponent checker in the player's home board.
+        """
+        home_points = player.get_home_points()
+        opponent_color = "negras" if player.get_color() == "blancas" else "blancas"
+
+        for point in home_points:
+            checkers = self.get_checkers_on_point(point)
+            if checkers and checkers[0].get_color() == opponent_color:
+                return True
+        return False
