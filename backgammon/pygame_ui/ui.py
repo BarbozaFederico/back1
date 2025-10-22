@@ -1,11 +1,10 @@
 import pygame
 import sys
-import time
 from backgammon.core.backgammon import BackgammonGame
 from backgammon.core.player import PasoMovimiento, SecuenciaMovimiento
 
 # Constants
-WIDTH, HEIGHT = 1400, 800
+WIDTH, HEIGHT = 1200, 800
 BOARD_COLOR = (244, 226, 198)  # A beige-like color
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
@@ -24,34 +23,26 @@ class PygameUI:
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption("Backgammon")
         self.font = pygame.font.Font(None, 24)
-        self.large_font = pygame.font.Font(None, 74)
         self.clock = pygame.time.Clock()
-        self.game_over = False
-        self.winner = None
-        self.game_over_time = None
 
         # Dynamic board layout constants
         self.board_edge = int(WIDTH * 0.02)
         self.point_height = int(HEIGHT * 0.4)
 
-        # Define a specific width for the main board area, leaving space for bear-off etc.
-        main_board_width_ratio = 0.85 # Let's say the main board takes 85% of the width
-        playing_width = int(WIDTH * main_board_width_ratio) - (2 * self.board_edge)
-
-        # We have 12 points and 1 bar. Bar is ~1.5x a point.
-        # Total units = 12 + 1.5 = 13.5
-        unit_width = playing_width / 13.5
+        playing_width = WIDTH - (2 * self.board_edge)
+        # Total horizontal space is divided into 12 points and 1 bar.
+        # Let's consider the bar to be twice as wide as a point.
+        # So, we have 12 + 2 = 14 "units" of width.
+        unit_width = playing_width / 14
         self.point_width = int(unit_width)
-        self.bar_width = int(unit_width * 1.5)
+        self.bar_width = int(unit_width * 2)
 
-        self.checker_radius = int(self.point_width * 0.4)
+        self.checker_radius = int(self.point_width * 0.45)
         self.selected_point = None
         self.point_rects = [None] * 24
         self.bar_rects = {}
-        self.bear_off_rects = {}
         self._calculate_point_rects()
         self._calculate_bar_rects()
-        self._calculate_bear_off_rects()
         self.used_dice = []
         self.possible_moves = []
         self.possible_dests = []
@@ -65,18 +56,6 @@ class PygameUI:
         bar_x = self.board_edge + 6 * self.point_width
         self.bar_rects['blancas'] = pygame.Rect(bar_x, 0, self.bar_width, HEIGHT / 2)
         self.bar_rects['negras'] = pygame.Rect(bar_x, HEIGHT / 2, self.bar_width, HEIGHT / 2)
-
-    def _calculate_bear_off_rects(self):
-        """Calculates the clickable rects for each player's bear-off area."""
-        # This area is now to the right of the main board
-        bear_off_x = self.board_edge + (12 * self.point_width) + self.bar_width + self.board_edge
-        bear_off_width = WIDTH - bear_off_x - self.board_edge
-
-        # White's bear-off is top-right
-        self.bear_off_rects['blancas'] = pygame.Rect(bear_off_x, self.board_edge, bear_off_width, self.point_height)
-
-        # Black's bear-off is bottom-right
-        self.bear_off_rects['negras'] = pygame.Rect(bear_off_x, HEIGHT - self.board_edge - self.point_height, bear_off_width, self.point_height)
 
     def _setup_game(self):
         """Sets up the players and starts the game."""
@@ -127,23 +106,32 @@ class PygameUI:
                 rect = self.point_rects[self.selected_source]
             pygame.draw.rect(self.screen, GREEN, rect, 4)
 
-        # Draw checkers on points first
+        # Highlight possible destinations
+        for dest_idx in self.possible_dests:
+            rect = self.point_rects[dest_idx]
+            pygame.draw.circle(self.screen, GREEN, rect.center, self.checker_radius * 0.3)
+
+        # Draw checkers on points
         for point_idx, checkers in enumerate(self.game.board.points):
             if not checkers:
                 continue
 
             rect = self.point_rects[point_idx]
             color = checker_colors[checkers[0].get_color()]
+
+            # Determine stacking direction and base position
             is_top_row = point_idx >= 12
             direction = 1 if is_top_row else -1
             base_y = rect.top + self.checker_radius if is_top_row else rect.bottom - self.checker_radius
 
             for i, checker in enumerate(checkers):
-                if i >= 5:
+                if i >= 5: # If more than 5 checkers, draw a count
                     count_text = self.font.render(str(len(checkers)), True, RED)
+                    # Position the count text on top of the 5th checker
                     text_y = base_y + (4 * 2 * self.checker_radius * direction)
                     self.screen.blit(count_text, (rect.centerx - count_text.get_width() / 2, text_y))
                     break
+
                 center_x = rect.centerx
                 center_y = base_y + (i * 2 * self.checker_radius * direction)
                 pygame.draw.circle(self.screen, color, (center_x, center_y), self.checker_radius)
@@ -153,6 +141,7 @@ class PygameUI:
         bar_x = self.board_edge + 6 * self.point_width + self.bar_width / 2
         for color_name, checkers in self.game.board.bar.items():
             color = checker_colors[color_name]
+            # Stack white checkers from top-middle, black from bottom-middle
             y_pos = HEIGHT / 2 - self.checker_radius if color_name == "blancas" else HEIGHT / 2 + self.checker_radius
             direction = -1 if color_name == "blancas" else 1
             for i, checker in enumerate(checkers):
@@ -160,41 +149,15 @@ class PygameUI:
                 pygame.draw.circle(self.screen, color, (bar_x, center_y), self.checker_radius)
                 pygame.draw.circle(self.screen, RED, (bar_x, center_y), self.checker_radius, 2)
 
-        # Draw borne-off checkers count inside the bear-off areas
+        # Draw borne-off checkers count
+        borne_off_x = WIDTH - self.board_edge
         white_borne_off = len(self.game.board.get_borne_off("blancas"))
-        if white_borne_off > 0:
-            white_rect = self.bear_off_rects['blancas']
-            white_text = self.font.render(f"Off: {white_borne_off}", True, BLACK)
-            self.screen.blit(white_text, (white_rect.centerx - white_text.get_width() / 2, white_rect.centery - white_text.get_height() / 2))
-
         black_borne_off = len(self.game.board.get_borne_off("negras"))
-        if black_borne_off > 0:
-            black_rect = self.bear_off_rects['negras']
-            black_text = self.font.render(f"Off: {black_borne_off}", True, WHITE)
-            self.screen.blit(black_text, (black_rect.centerx - black_text.get_width() / 2, black_rect.centery - black_text.get_height() / 2))
 
-        # Now, draw the highlights on top of everything
-        for dest in self.possible_dests:
-            if dest == 'bear_off':
-                player_color = self.game.get_current_player().get_color()
-                rect = self.bear_off_rects[player_color]
-                pygame.draw.rect(self.screen, GREEN, rect, 4)
-            else:
-                rect = self.point_rects[dest]
-                pygame.draw.circle(self.screen, GREEN, rect.center, self.checker_radius * 0.3)
-
-    def _draw_game_over_screen(self):
-        """Draws the game over screen."""
-        # Create a semi-transparent overlay
-        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180)) # Black with alpha
-        self.screen.blit(overlay, (0, 0))
-
-        # Display winner message
-        winner_text = f"¡Gana el jugador {self.winner.get_nombre()}!"
-        text_surface = self.large_font.render(winner_text, True, WHITE)
-        text_rect = text_surface.get_rect(center=(WIDTH / 2, HEIGHT / 2))
-        self.screen.blit(text_surface, text_rect)
+        white_text = self.font.render(f"White Off: {white_borne_off}", True, BLACK)
+        black_text = self.font.render(f"Black Off: {black_borne_off}", True, WHITE)
+        self.screen.blit(white_text, (borne_off_x - white_text.get_width() - 10, self.board_edge))
+        self.screen.blit(black_text, (borne_off_x - black_text.get_width() - 10, HEIGHT - self.board_edge - black_text.get_height()))
 
     def _draw_game_info(self):
         """Displays the current player and dice roll."""
@@ -224,12 +187,6 @@ class PygameUI:
         # Draw the bar
         bar_x = self.board_edge + 6 * self.point_width
         pygame.draw.rect(self.screen, frame_color, (bar_x, 0, self.bar_width, HEIGHT))
-
-        # Draw bear-off areas
-        bear_off_color = (100, 100, 220, 128) # A semi-transparent blue
-        for color, rect in self.bear_off_rects.items():
-            pygame.draw.rect(self.screen, bear_off_color, rect)
-            # The count of borne-off checkers is now drawn in _draw_checkers
 
         # Points colors
         color1 = (210, 180, 140)  # Tan
@@ -266,13 +223,6 @@ class PygameUI:
                 return i
         return None
 
-    def _get_bear_off_from_pos(self, pos):
-        """Checks if the mouse click is on a valid bear-off area."""
-        player = self.game.get_current_player()
-        if self.bear_off_rects[player.get_color()].collidepoint(pos):
-            return 'bear_off'
-        return None
-
     def _get_possible_dests(self, source):
         """Get all possible destination points for a selected source."""
         dests = []
@@ -281,17 +231,14 @@ class PygameUI:
         for option in self.possible_moves:
             for paso in option.secuencia:
                 if paso.desde == start_point:
-                    if paso.hasta is None: # Bear-off move
-                        dests.append('bear_off')
-                    else:
+                    if paso.hasta is not None:
                         dests.append(paso.hasta)
         return list(set(dests))
 
-    def _attempt_move(self, source, destination):
+    def _attempt_move(self, source, dest_idx):
         """Finds the correct PasoMovimiento, applies it, and updates the turn state."""
         player = self.game.get_current_player()
         start_idx = None if source == 'bar' else source
-        dest_idx = None if destination == 'bear_off' else destination
 
         # Find a legal move that matches the selected start/end and an available die
         move_to_apply = None
@@ -309,9 +256,11 @@ class PygameUI:
             self.possible_dests = []
             return
 
-        # The move is valid, so we can apply it.
-        # The 'move_to_apply' object is a PasoMovimiento which contains all necessary info.
-        secuencia = [move_to_apply]  # aplicar_movimiento expects a list of steps
+        # Create and apply the move
+        is_capture = len(self.game.board.points[end_idx]) == 1 and self.game.board.points[end_idx][0].get_color() != player.get_color()
+        paso = PasoMovimiento(desde=start_idx, hasta=end_idx, dado=move_dist, captura=is_capture)
+        secuencia = [paso]
+        main
         self.game.board.aplicar_movimiento(player, secuencia)
         self.used_dice.append(move_to_apply.dado)
 
@@ -343,14 +292,6 @@ class PygameUI:
     def _end_turn(self):
         """Finalizes the current turn and sets up the next one."""
         print("Turn over.")
-
-        # Check for a winner before advancing the turn
-        if self.game.is_game_over():
-            self.game_over = True
-            self.winner = self.game.get_current_player()
-            self.game_over_time = time.time()
-            return
-
         self.game.next_turn()
         self.game.roll_dice()
         self.used_dice = []
@@ -359,61 +300,34 @@ class PygameUI:
     def _handle_click(self, pos):
         """Handles a mouse click on the board."""
         player = self.game.get_current_player()
-        clicked_point = self._get_point_from_pos(pos)
-        clicked_bear_off = self._get_bear_off_from_pos(pos)
 
-        # Handle a click on a destination (point or bear_off)
-        if self.selected_source is not None:
-            destination = clicked_point if clicked_point is not None else clicked_bear_off
-            if destination in self.possible_dests:
-                self._attempt_move(self.selected_source, destination)
-                return
-
-        # Priority 1: Handle moves from the bar
+        # Player must move from the bar if they have checkers there
         if self.game.board.jugador_tiene_en_barra(player):
-            # If the bar is already selected, check for a valid destination click
-            if self.selected_source == 'bar':
-                if clicked_point in self.possible_dests:
-                    self._attempt_move('bar', clicked_point)
-                else: # Click was not on a valid destination, so deselect
-                    self.selected_source = None
-                    self.possible_dests = []
-                return # Action handled for this click
-
-            # If the bar is NOT selected, check if the click is on the bar to select it
-            elif self.bar_rects[player.get_color()].collidepoint(pos):
+            if self.bar_rects[player.get_color()].collidepoint(pos):
                 self.selected_source = 'bar'
                 self.possible_dests = self._get_possible_dests(self.selected_source)
-                return # Action handled for this click
-
-            # If click is elsewhere, do nothing (or reset) since player must play from bar
             else:
                 self.selected_source = None
                 self.possible_dests = []
-            return # IMPORTANT: prevent any other move logic from running
+            return
 
-        # Priority 2: Handle regular moves if the bar is empty
+        clicked_point = self._get_point_from_pos(pos)
         if clicked_point is None:
             self.selected_source = None
             self.possible_dests = []
             return
 
-        # If a checker is already selected
         if self.selected_source is not None:
-            # If a valid destination is clicked, attempt the move
             if clicked_point in self.possible_dests:
                 self._attempt_move(self.selected_source, clicked_point)
-            # If another of the player's checkers is clicked, switch selection
-            elif self.game.board.points[clicked_point] and self.game.board.points[clicked_point][0].get_color() == player.get_color():
-                self.selected_source = clicked_point
-                self.possible_dests = self._get_possible_dests(self.selected_source)
-            # Otherwise, deselect
             else:
-                self.selected_source = None
-                self.possible_dests = []
-        # If no checker is selected
+                if self.game.board.points[clicked_point] and self.game.board.points[clicked_point][0].get_color() == player.get_color():
+                    self.selected_source = clicked_point
+                    self.possible_dests = self._get_possible_dests(self.selected_source)
+                else:
+                    self.selected_source = None
+                    self.possible_dests = []
         else:
-            # If one of the player's checkers is clicked, select it
             if self.game.board.points[clicked_point] and self.game.board.points[clicked_point][0].get_color() == player.get_color():
                 self.selected_source = clicked_point
                 self.possible_dests = self._get_possible_dests(self.selected_source)
@@ -424,21 +338,13 @@ class PygameUI:
 
         running = True
         while running:
-            if self.game_over:
-                self._draw_game_over_screen()
-                pygame.display.flip()
-                if time.time() - self.game_over_time > 5: # 5-second delay
-                    running = False
-                self.clock.tick(10) # Tick at a lower rate
-                continue
-
             if not self.used_dice and not self.possible_moves:
                 self._end_turn()
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-                if event.type == pygame.MOUSEBUTTONDOWN and not self.game_over:
+                if event.type == pygame.MOUSEBUTTONDOWN:
                     self._handle_click(event.pos)
 
             self.screen.fill(BOARD_COLOR)
